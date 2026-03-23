@@ -91,3 +91,26 @@ my_settings.txt
 borrar/*
 
 */ExecMean.txt
+
+# ============================================================
+# Docker environment — results & runtime artifacts
+# ============================================================
+results/
+test_results_*.txt
+docker/*_plan.md
+docker/SUMMARY.md
+pln.md
+
+# Datasets (large, downloaded separately)
+datasets/
+
+# Binary artifacts that may leak into working dir
+*.pdf
+*.o
+*.d
+*.so
+*.a
+__pycache__/
+
+# Thirdparty build artifacts not already covered
+Thirdparty/Sophus/build/
