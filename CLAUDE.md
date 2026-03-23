@@ -59,6 +59,9 @@ bash ~/workspace/ORB_SLAM3/docker/run_euroc.sh --mode mono --seq MH_01_easy --ev
 # Stereo headless with evaluation
 bash ~/workspace/ORB_SLAM3/docker/run_euroc.sh --mode stereo --seq MH_01_easy --evaluate --no-viewer
 
+# Stereo with video recording of the viewer
+bash ~/workspace/ORB_SLAM3/docker/run_euroc.sh --mode stereo --seq MH_01_easy --record --evaluate
+
 # Mono-inertial
 bash ~/workspace/ORB_SLAM3/docker/run_euroc.sh --mode mono_inertial --seq MH_01_easy --evaluate
 
@@ -75,6 +78,7 @@ bash ~/workspace/ORB_SLAM3/docker/run_euroc.sh --mode stereo_inertial --seq MH_0
 - `f_<seq>.txt` — frame trajectory (TUM format)
 - `kf_<seq>.txt` — keyframe trajectory
 - `ate_results.txt` — ATE metrics (with --evaluate)
+- `slam_viewer.mp4` — recorded viewer video (with --record, modes with viewer only)
 - `ate_plot.pdf` — trajectory plot (with --evaluate)
 - `timing_profile.txt` — wall time, per-frame ms, FPS
 
@@ -92,6 +96,30 @@ bash ~/workspace/ORB_SLAM3/docker/run_euroc.sh --mode stereo_inertial --seq MH_0
 | stereo_inertial | false | N/A |
 
 When viewer is hardcoded ON but no `$DISPLAY`, `run_euroc.sh` auto-uses `xvfb-run`.
+
+## Visualization
+
+Three options for viewing SLAM output:
+
+**Option 1 — Real-time X11 viewer** (requires `ssh -X` or local display):
+```bash
+xhost +local:docker
+docker exec -e DISPLAY=$DISPLAY tamirt_orbslam3 \
+  bash ~/workspace/ORB_SLAM3/docker/run_euroc.sh --mode stereo --seq MH_01_easy
+```
+
+**Option 2 — Record viewer to video** (headless, saves MP4):
+```bash
+bash ~/workspace/ORB_SLAM3/docker/run_euroc.sh --mode stereo --seq MH_01_easy --record --evaluate
+# Output: results/stereo/MH_01_easy/<timestamp>/slam_viewer.mp4
+```
+Only works with modes that have a viewer (`stereo`, `mono_inertial`). Uses Xvfb + ffmpeg.
+
+**Option 3 — Static trajectory plot** (PDF, always available with `--evaluate`):
+```bash
+# Generated automatically with --evaluate, or re-plot existing results:
+bash ~/workspace/ORB_SLAM3/docker/plot_trajectory.sh --results results/stereo/MH_01_easy/<timestamp>
+```
 
 ## Dataset Locations
 

@@ -4,6 +4,7 @@
 #   bash run_euroc.sh --mode mono --seq MH_01_easy --evaluate
 #   bash run_euroc.sh --mode stereo --seq MH_01_easy --no-viewer
 #   bash run_euroc.sh --mode mono_inertial --seq V1_01_easy --evaluate
+#   bash run_euroc.sh --mode stereo --seq MH_01_easy --record --evaluate
 #   bash run_euroc.sh --mode stereo_inertial --seq MH_03_medium
 
 set -e
@@ -18,20 +19,22 @@ MODE=""
 SEQ=""
 EVALUATE=false
 NO_VIEWER=false
+RECORD=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --mode)     MODE="$2"; shift 2 ;;
-        --seq)      SEQ="$2"; shift 2 ;;
-        --evaluate) EVALUATE=true; shift ;;
+        --mode)      MODE="$2"; shift 2 ;;
+        --seq)       SEQ="$2"; shift 2 ;;
+        --evaluate)  EVALUATE=true; shift ;;
         --no-viewer) NO_VIEWER=true; shift ;;
+        --record)    RECORD=true; shift ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
 
 if [ -z "$MODE" ] || [ -z "$SEQ" ]; then
-    echo "Usage: $0 --mode <mono|stereo|mono_inertial|stereo_inertial> --seq <sequence_name> [--evaluate] [--no-viewer]"
+    echo "Usage: $0 --mode <mono|stereo|mono_inertial|stereo_inertial> --seq <sequence_name> [--evaluate] [--no-viewer] [--record]"
     exit 1
 fi
 
@@ -93,9 +96,32 @@ mkdir -p "$OUTPUT_DIR"
 
 OUTPUT_NAME="$SEQ"
 
-# Determine if we need xvfb
+# Determine display/viewer strategy
 PREFIX=""
-if [ "$VIEWER_HARDCODED" = true ]; then
+XVFB_PID=""
+FFMPEG_PID=""
+RECORD_FILE=""
+MANAGED_XVFB=false
+XVFB_DISPLAY=""
+
+if [ "$RECORD" = true ] && [ "$VIEWER_HARDCODED" = false ]; then
+    echo "[WARN] --record only works with modes that have a viewer (stereo, mono_inertial)."
+    echo "       Mode '$MODE' has viewer disabled in source. Ignoring --record."
+    RECORD=false
+fi
+
+if [ "$RECORD" = true ]; then
+    # Recording: start our own Xvfb + ffmpeg
+    XVFB_DISPLAY=":$((RANDOM % 100 + 50))"
+    RECORD_FILE="$OUTPUT_DIR/slam_viewer.mp4"
+    echo "[RECORD] Starting Xvfb on display $XVFB_DISPLAY..."
+    Xvfb "$XVFB_DISPLAY" -screen 0 1280x720x24 &
+    XVFB_PID=$!
+    sleep 1
+    export DISPLAY="$XVFB_DISPLAY"
+    MANAGED_XVFB=true
+    # No PREFIX needed — we set DISPLAY directly
+elif [ "$VIEWER_HARDCODED" = true ]; then
     if [ "$NO_VIEWER" = true ] || [ -z "$DISPLAY" ]; then
         PREFIX="xvfb-run -a"
     fi
@@ -109,12 +135,27 @@ echo "Sequence:   $SEQ ($SHORT_NAME)"
 echo "Dataset:    $DATASET_PATH"
 echo "Output:     $OUTPUT_DIR"
 echo "Evaluate:   $EVALUATE"
+echo "Record:     $RECORD"
 echo "GPU:        CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 echo "============================================"
 
 # Run SLAM with timing
 cd "$SLAM_DIR"
 echo "[RUN] Starting ORB-SLAM3..."
+
+# Start ffmpeg recording if requested (after a brief delay for viewer to init)
+if [ "$RECORD" = true ]; then
+    (
+        sleep 3  # wait for Pangolin viewer window to appear
+        echo "[RECORD] Starting ffmpeg capture to $RECORD_FILE..."
+        ffmpeg -y -video_size 1280x720 -framerate 10 \
+            -f x11grab -i "$XVFB_DISPLAY" \
+            -c:v libx264 -preset ultrafast -crf 23 \
+            -pix_fmt yuv420p \
+            "$RECORD_FILE" </dev/null >/dev/null 2>&1
+    ) &
+    FFMPEG_PID=$!
+fi
 
 SLAM_START=$(date +%s%N)
 
@@ -131,6 +172,24 @@ SLAM_ELAPSED_MS=$(( (SLAM_END - SLAM_START) / 1000000 ))
 SLAM_ELAPSED_S=$(echo "scale=2; $SLAM_ELAPSED_MS / 1000" | bc)
 
 echo "[RUN] ORB-SLAM3 finished."
+
+# Stop recording if active
+if [ -n "$FFMPEG_PID" ] && kill -0 "$FFMPEG_PID" 2>/dev/null; then
+    sleep 1  # let ffmpeg flush
+    kill "$FFMPEG_PID" 2>/dev/null || true
+    wait "$FFMPEG_PID" 2>/dev/null || true
+    echo "[RECORD] ffmpeg stopped"
+fi
+if [ "$MANAGED_XVFB" = true ] && [ -n "$XVFB_PID" ]; then
+    kill "$XVFB_PID" 2>/dev/null || true
+    wait "$XVFB_PID" 2>/dev/null || true
+    echo "[RECORD] Xvfb stopped"
+fi
+if [ "$RECORD" = true ] && [ -f "$RECORD_FILE" ]; then
+    RECORD_SIZE=$(du -h "$RECORD_FILE" | cut -f1)
+    echo "[RECORD] Video saved: $RECORD_FILE ($RECORD_SIZE)"
+fi
+
 echo "[TIMING] Total SLAM wall time: ${SLAM_ELAPSED_S}s (${SLAM_ELAPSED_MS}ms)"
 
 # Save timing profile

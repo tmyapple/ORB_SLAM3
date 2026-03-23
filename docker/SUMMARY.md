@@ -87,6 +87,19 @@ docker/
 
 2. **Short name regex bug**: Original sed regex `s/^(MH|V[0-9])_0?([0-9]+)_.*/\1\2/` produced "MH1" instead of "MH01". Fixed to preserve two-digit format.
 
+## Visualization Support (added post-initial setup)
+
+Three visualization options implemented and verified:
+
+1. **Real-time X11 Viewer** — forward DISPLAY via `ssh -X` + `xhost`, viewer renders live 3D map
+2. **Headless Video Recording** — `--record` flag in run_euroc.sh uses Xvfb + ffmpeg x11grab to capture the Pangolin viewer to MP4 (H.264, 1280x720). Tested: 101MB video, 212s, 2120 frames from stereo MH_01_easy.
+3. **Static Trajectory Plots** — PDF plots via `--evaluate` flag + standalone `plot_trajectory.sh` for re-plotting existing results
+
+Additional files:
+- `docker/plot_trajectory.sh` — re-plot trajectory without re-running SLAM
+- `install_deps.sh` updated with `ffmpeg`
+- `run_euroc.sh` updated with `--record` flag
+
 ## Agent Coordination
 
 Work was parallelized across 5 specialized agents:

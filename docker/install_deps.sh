@@ -36,7 +36,8 @@ $SUDO apt-get install -y \
     unzip \
     python3-numpy \
     python3-matplotlib \
-    bc
+    bc \
+    ffmpeg
 
 # ------------------------------------------------------------------
 # Fix numpy version conflict: system matplotlib needs numpy<2,

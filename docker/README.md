@@ -249,20 +249,68 @@ docker exec tamirt_orbslam3 bash ~/workspace/ORB_SLAM3/docker/run_full_test.sh -
       body.yaml      # Body frame definition
 ```
 
-## Headless Visualization
+## Visualization
 
-Modes with hardcoded viewer (`stereo`, `mono_inertial`) use `xvfb-run` automatically when no `$DISPLAY` is available. The `--no-viewer` flag forces headless mode.
+Three options for viewing the SLAM viewer output (3D map, trajectory, features):
 
-To run with actual display (e.g., via X11 forwarding):
+### Option 1: Real-time X11 Viewer
+
+Requires SSH with X forwarding (`ssh -X`) or a local display.
 
 ```bash
-# On host, allow X access
+# On host, allow X access to Docker
 xhost +local:docker
 
-# Run container with display
+# Run with display forwarded into container
 docker exec -e DISPLAY=$DISPLAY tamirt_orbslam3 \
   bash ~/workspace/ORB_SLAM3/docker/run_euroc.sh --mode stereo --seq MH_01_easy
 ```
+
+Shows real-time: 3D point cloud map, camera trajectory, current frame with ORB features.
+
+### Option 2: Record Viewer to Video (headless)
+
+Records the Pangolin viewer to an MP4 file using Xvfb + ffmpeg. No display needed.
+
+```bash
+# Inside container or via docker exec
+bash ~/workspace/ORB_SLAM3/docker/run_euroc.sh --mode stereo --seq MH_01_easy --record --evaluate
+
+# Output includes:
+#   results/stereo/MH_01_easy/<timestamp>/slam_viewer.mp4   (H.264, 1280x720, ~100MB)
+```
+
+**Notes:**
+- Only works with modes that have a viewer: `stereo`, `mono_inertial`
+- Modes without viewer (`mono`, `stereo_inertial`) print a warning and skip recording
+- Video can be copied to your local machine: `scp user@host:~/workspace/ORB_SLAM3/results/.../slam_viewer.mp4 .`
+
+### Option 3: Static Trajectory Plots
+
+PDF plots comparing estimated vs ground truth trajectory. Generated automatically with `--evaluate`.
+
+```bash
+# Generated during SLAM run with --evaluate:
+#   results/<mode>/<seq>/<timestamp>/ate_plot.pdf
+
+# Re-plot existing results without re-running SLAM:
+bash ~/workspace/ORB_SLAM3/docker/plot_trajectory.sh --results results/stereo/MH_01_easy/<timestamp>
+
+# Or specify files manually:
+bash ~/workspace/ORB_SLAM3/docker/plot_trajectory.sh \
+  --traj results/stereo/MH_01_easy/<timestamp>/f_MH_01_easy.txt \
+  --gt evaluation/Ground_truth/EuRoC_left_cam/MH01_GT.txt \
+  --output my_plot.pdf
+```
+
+### Viewer Behavior by Mode
+
+| Mode | Viewer | Headless handling | `--record` |
+|------|--------|-------------------|------------|
+| `mono` | OFF (hardcoded) | N/A | Not supported |
+| `stereo` | ON (hardcoded) | auto xvfb | Supported |
+| `mono_inertial` | ON (hardcoded) | auto xvfb | Supported |
+| `stereo_inertial` | OFF (hardcoded) | N/A | Not supported |
 
 ## Timing Profiling
 
