@@ -37,7 +37,9 @@ $SUDO apt-get install -y \
     python3-numpy \
     python3-matplotlib \
     bc \
-    ffmpeg
+    ffmpeg \
+    openbox \
+    xdotool
 
 # ------------------------------------------------------------------
 # Fix numpy version conflict: system matplotlib needs numpy<2,

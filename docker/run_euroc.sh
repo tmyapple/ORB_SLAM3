@@ -111,16 +111,40 @@ if [ "$RECORD" = true ] && [ "$VIEWER_HARDCODED" = false ]; then
 fi
 
 if [ "$RECORD" = true ]; then
-    # Recording: start our own Xvfb + ffmpeg
+    # Recording: start our own Xvfb + window manager + ffmpeg
+    # Pangolin map viewer = 1024x768, OpenCV frame window = up to 1504x480 (stereo)
+    # Layout: Pangolin on left, camera frames on right — total ~2560x768
     XVFB_DISPLAY=":$((RANDOM % 100 + 50))"
     RECORD_FILE="$OUTPUT_DIR/slam_viewer.mp4"
-    echo "[RECORD] Starting Xvfb on display $XVFB_DISPLAY..."
-    Xvfb "$XVFB_DISPLAY" -screen 0 1280x720x24 &
+    XVFB_RES="2560x900x24"
+    echo "[RECORD] Starting Xvfb on display $XVFB_DISPLAY (${XVFB_RES})..."
+    Xvfb "$XVFB_DISPLAY" -screen 0 "$XVFB_RES" &
     XVFB_PID=$!
     sleep 1
     export DISPLAY="$XVFB_DISPLAY"
     MANAGED_XVFB=true
-    # No PREFIX needed — we set DISPLAY directly
+
+    # Start a lightweight window manager so windows don't overlap at (0,0)
+    openbox --sm-disable &
+    OPENBOX_PID=$!
+    sleep 0.5
+
+    # Background task: wait for windows to appear, then position them side by side
+    (
+        sleep 8  # wait for SLAM + viewer to initialize
+        # Position Pangolin 3D viewer on the left (1024x768)
+        MAP_WIN=$(DISPLAY="$XVFB_DISPLAY" xdotool search --name "Map Viewer" 2>/dev/null | head -1)
+        if [ -n "$MAP_WIN" ]; then
+            DISPLAY="$XVFB_DISPLAY" xdotool windowmove "$MAP_WIN" 0 0 2>/dev/null || true
+            DISPLAY="$XVFB_DISPLAY" xdotool windowsize "$MAP_WIN" 1024 768 2>/dev/null || true
+        fi
+        # Position OpenCV frame window on the right
+        FRAME_WIN=$(DISPLAY="$XVFB_DISPLAY" xdotool search --name "Current Frame" 2>/dev/null | head -1)
+        if [ -n "$FRAME_WIN" ]; then
+            DISPLAY="$XVFB_DISPLAY" xdotool windowmove "$FRAME_WIN" 1030 0 2>/dev/null || true
+            DISPLAY="$XVFB_DISPLAY" xdotool windowsize "$FRAME_WIN" 1504 480 2>/dev/null || true
+        fi
+    ) &
 elif [ "$VIEWER_HARDCODED" = true ]; then
     if [ "$NO_VIEWER" = true ] || [ -z "$DISPLAY" ]; then
         PREFIX="xvfb-run -a"
@@ -148,7 +172,7 @@ if [ "$RECORD" = true ]; then
     (
         sleep 3  # wait for Pangolin viewer window to appear
         echo "[RECORD] Starting ffmpeg capture to $RECORD_FILE..."
-        ffmpeg -y -video_size 1280x720 -framerate 10 \
+        ffmpeg -y -video_size 2560x900 -framerate 10 \
             -f x11grab -i "$XVFB_DISPLAY" \
             -c:v libx264 -preset ultrafast -crf 23 \
             -pix_fmt yuv420p \
@@ -179,6 +203,10 @@ if [ -n "$FFMPEG_PID" ] && kill -0 "$FFMPEG_PID" 2>/dev/null; then
     kill "$FFMPEG_PID" 2>/dev/null || true
     wait "$FFMPEG_PID" 2>/dev/null || true
     echo "[RECORD] ffmpeg stopped"
+fi
+if [ -n "${OPENBOX_PID:-}" ]; then
+    kill "$OPENBOX_PID" 2>/dev/null || true
+    wait "$OPENBOX_PID" 2>/dev/null || true
 fi
 if [ "$MANAGED_XVFB" = true ] && [ -n "$XVFB_PID" ]; then
     kill "$XVFB_PID" 2>/dev/null || true
