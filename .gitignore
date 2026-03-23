@@ -98,7 +98,6 @@ borrar/*
 results/
 test_results_*.txt
 docker/*_plan.md
-docker/SUMMARY.md
 pln.md
 
 # Datasets (large, downloaded separately)
